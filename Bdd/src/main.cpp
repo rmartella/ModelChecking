@@ -27,14 +27,6 @@ public:
 	bool isTerminal = false;
 	int id;
 
-	inline static std::deque<BddNode*> queueNodes;
-	inline static bool firstExpresion = true;
-	inline static int currentId = 1;
-	inline static std::vector<BddNode*> labelNodes;
-	inline static std::map<std::string, BddNode*> nodesMap;
-	inline static std::set<std::string> variables;
-	inline static std::vector<bool> truthTable;
-
 	/*~BddNode()
 	{
 	}*/
@@ -44,27 +36,34 @@ public:
 		{
 			hi->erase();
 			this->hi = nullptr;
-			lo->erase();
 			this->lo = nullptr;
 		}
-		truthTable.clear();
 		delete this;
 	}
 
-	bool getFuncionBoolean(){
-		if(queueNodes.empty())
-			firstExpresion = true;
-		queueNodes.push_front(this);
+	bool operator()(const BddNode *obj2) const
+	{
+		if (var.compare(obj2->var) == 0)
+			return true;
+		else
+			return false;
+	}
+
+protected:
+	bool getBooleanFunction(std::deque<BddNode*> *queueNodes, bool *firstExpresion){
+		if(queueNodes->empty())
+			*firstExpresion = true;
+		queueNodes->push_front(this);
 		if(isTerminal)
 		{
-			queueNodes.pop_front();
+			queueNodes->pop_front();
 			return atof(var.c_str());
 		}
-		if(this->lo->getFuncionBoolean())
+		if(this->lo->getBooleanFunction(queueNodes, firstExpresion))
 		{
-			if(firstExpresion)
+			if(*firstExpresion)
 			{
-				firstExpresion = false;
+				*firstExpresion = false;
 				std::cout << "(";
 			}else
 				std::cout << "+(";
@@ -72,21 +71,21 @@ public:
 			std::cout << "¬" << this->var;
 			BddNode *currentNode = this;
 			BddNode *prevNode;
-			for (unsigned int i = 1; i < queueNodes.size(); i++) {
-				prevNode = queueNodes[i];
+			for (unsigned int i = 1; i < queueNodes->size(); i++) {
+				prevNode = queueNodes->at(i);
 				if (prevNode->lo == currentNode)
-					std::cout << "* ¬" << queueNodes[i]->var;
+					std::cout << "* ¬" << queueNodes->at(i)->var;
 				else
-					std::cout << "*" << queueNodes[i]->var;
+					std::cout << "*" << queueNodes->at(i)->var;
 				currentNode = prevNode;
 			}
 			std::cout << ")";
 		}
-		if(this->hi->getFuncionBoolean())
+		if(this->hi->getBooleanFunction(queueNodes, firstExpresion))
 		{
-			if(firstExpresion)
+			if(*firstExpresion)
 			{
-				firstExpresion = false;
+				*firstExpresion = false;
 				std::cout << "(";
 			} else
 				std::cout << "+(";
@@ -94,46 +93,45 @@ public:
 			std::cout << this->var;
 			BddNode *currentNode = this;
 			BddNode *prevNode;
-			for (unsigned int i = 1; i < queueNodes.size(); i++) {
-				prevNode = queueNodes[i];
+			for (unsigned int i = 1; i < queueNodes->size(); i++) {
+				prevNode = queueNodes->at(i);
 				if(prevNode->lo == currentNode)
-					std::cout << "*¬" << queueNodes[i]->var;
+					std::cout << "*¬" << queueNodes->at(i)->var;
 				else
-					std::cout << "*" << queueNodes[i]->var;
+					std::cout << "*" << queueNodes->at(i)->var;
 				currentNode = prevNode;
 			}
 			std::cout << ")";
 		}
-		queueNodes.pop_front();
-		if(queueNodes.empty())
-		{
-			firstExpresion = true;
+		queueNodes->pop_front();
+		if(queueNodes->empty()){
+			*firstExpresion = true;
 			std::cout << std::endl;
 		}
 
 		return false;
 	}
 
-	void label()
+	void label(std::vector<BddNode*> *labelNodes, int *currentId)
 	{
 		//std::cout << "var:" << var.c_str() << std::endl;
 		//std::string parent = var;
 		if(this->lo != nullptr)
-			lo->label();
+			lo->label(labelNodes, currentId);
 		else
 		{
 			this->id = atof(this->var.c_str());
-			if(std::find(labelNodes.begin(), labelNodes.end(), this) == labelNodes.end())
-				this->labelNodes.push_back(this);
+			if(std::find(labelNodes->begin(), labelNodes->end(), this) == labelNodes->end())
+				labelNodes->push_back(this);
 			return;
 		}
 		if(this->hi != nullptr)
-			hi->label();
+			hi->label(labelNodes, currentId);
 		else
 		{
 			this->id = atof(this->var.c_str());
-			if(std::find(labelNodes.begin(), labelNodes.end(), this) == labelNodes.end())
-				this->labelNodes.push_back(this);
+			if(std::find(labelNodes->begin(), labelNodes->end(), this) == labelNodes->end())
+				labelNodes->push_back(this);
 			return;
 		}
 		if(this->lo != nullptr && this->hi != nullptr)
@@ -141,77 +139,70 @@ public:
 			if(this->hi->id == this->lo->id)
 			{
 				this->id = this->hi->id;
-				this->labelNodes.push_back(this);
+				labelNodes->push_back(this);
 			}
 			else
 			{
 				std::vector<BddNode*>::iterator it = std::find_if(
-						labelNodes.begin(), labelNodes.end(), *this);
+						labelNodes->begin(), labelNodes->end(), *this);
 
-				if (it != labelNodes.end() && (*it)->lo->id == this->lo->id
+				if (it != labelNodes->end() && (*it)->lo->id == this->lo->id
 						&& (*it)->hi->id == this->hi->id) {
 					this->id = (*it)->id;
 				}
 				else
 				{
-					currentId += 1;
-					this->id = currentId;
-					this->labelNodes.push_back(this);
+					*currentId += 1;
+					this->id = *currentId;
+					labelNodes->push_back(this);
 				}
 			}
-
 		}
 	}
 
-	void redirect()
+	void redirect(std::vector<BddNode*> *nodesInsert, BddNode* parent)
 	{
 		if(this->hi != nullptr && this->lo != nullptr)
 		{
-			this->lo->redirect();
-			this->hi->redirect();
+			// parent = this;
+			this->lo->redirect(nodesInsert, this);
+			this->hi->redirect(nodesInsert, this);
+			std::vector<BddNode*>::iterator it = nodesInsert->begin();
+			for (it = nodesInsert->begin(); it != nodesInsert->end(); it++) {
+				BddNode* node = *it;
+				if (node->id == this->id && node != this)
+					break;
+			}
+			if (it != nodesInsert->end()) {
+				if (parent->lo == this)
+					parent->lo = *it;
+				else
+					parent->hi = *it;
+				delete this;
+			} else if(*it != this)
+				nodesInsert->push_back(this);
 		}
 	}
 
-	void reduce()
-	{
-		currentId = 1;
-		labelNodes.clear();
-		label();
-		redirect();
-		labelNodes.clear();
-	}
+	bool generateTruthTable(std::deque<BddNode*> *queueNodes,
+			std::set<std::string> *variables, std::vector<bool> *truthTable) {
 
-	bool generateTruthTable(){
-
-		if(queueNodes.empty())
-			firstExpresion = true;
-		queueNodes.push_front(this);
-
-		if(firstExpresion)
-		{
-			size_t tableSize = 1;
-			for (unsigned int i=0; i< variables.size(); ++i) tableSize*=2;
-			truthTable.clear();
-			truthTable = std::vector<bool>(tableSize, false);
-			firstExpresion = false;
-		}
-
-		if(this->lo == this->hi && this->lo == nullptr)
+		queueNodes->push_front(this);
+		if (this->lo == this->hi && this->lo == nullptr)
 			return atoi(var.c_str());
 
-		if(lo->generateTruthTable())
-		{
+		if (lo->generateTruthTable(queueNodes, variables, truthTable)) {
 			std::vector<std::string> codigos;
 			std::string base;
-			for(unsigned int i = 0; i < variables.size(); i++)
+			for (unsigned int i = 0; i < variables->size(); i++)
 				base += "*";
 
-			BddNode *currentNode = queueNodes[0];
+			BddNode *currentNode = queueNodes->at(0);
 			BddNode *prevNode = this;
-			for (unsigned int i = 1; i <= queueNodes.size() - 1; i++) {
+			for (unsigned int i = 1; i <= queueNodes->size() - 1; i++) {
 				int indexVar = 0;
-				for (std::set<std::string>::iterator it = variables.begin();
-						it != variables.end(); it++, indexVar++) {
+				for (std::set<std::string>::iterator it = variables->begin();
+						it != variables->end(); it++, indexVar++) {
 					if ((*it).compare(prevNode->var) == 0)
 						break;
 				}
@@ -220,72 +211,9 @@ public:
 					base[indexVar] = '0';
 				else
 					base[indexVar] = '1';
-				if(i < queueNodes.size() - 1)
-				{
-					prevNode = queueNodes[i + 1];
-					currentNode = queueNodes[i];
-				}
-			}
-
-			codigos.push_back(base);
-			bool fill;
-			do {
-				bool findPattern = false;
-				fill = false;
-				for (unsigned int i = 0; i < codigos.size() && !findPattern;
-						i++)
-					for (unsigned int j = 0;
-							j < codigos[i].size() && !findPattern; j++) {
-						if (codigos[i][j] == '*') {
-							std::string newPattern = codigos[i];
-							codigos.erase(codigos.begin() + i);
-							newPattern[j] = '0';
-							codigos.push_back(newPattern);
-							newPattern[j] = '1';
-							codigos.push_back(newPattern);
-							findPattern = true;
-							fill = true;
-						}
-					}
-			} while (fill);
-
-			for(unsigned int i = 0; i < codigos.size(); i++)
-			{
-				int idx = 0;
-				for(unsigned int j = 0; j < codigos[i].size(); j++)
-				{
-					if (codigos[i][j] == '1')
-						idx |= (1 << j);
-				}
-				truthTable[idx] = 1;
-			}
-		}
-		queueNodes.pop_front();
-		if(hi->generateTruthTable())
-		{
-			std::vector<std::string> codigos;
-			std::string base;
-			for (unsigned int i = 0; i < variables.size(); i++)
-				base += "*";
-
-			BddNode *currentNode = queueNodes[0];
-			BddNode *prevNode = this;
-			for (unsigned int i = 1; i <= queueNodes.size() - 1; i++) {
-				int indexVar = 0;
-				for (std::set<std::string>::iterator it = variables.begin();
-						it != variables.end(); it++, indexVar++) {
-					if ((*it).compare(prevNode->var) == 0)
-						break;
-				}
-
-				if (prevNode->lo == currentNode)
-					base[indexVar] = '0';
-				else
-					base[indexVar] = '1';
-				if(i < queueNodes.size() - 1)
-				{
-					prevNode = queueNodes[i + 1];
-					currentNode = queueNodes[i];
+				if (i < queueNodes->size() - 1) {
+					prevNode = queueNodes->at(i + 1);
+					currentNode = queueNodes->at(i);
 				}
 			}
 
@@ -317,42 +245,145 @@ public:
 					if (codigos[i][j] == '1')
 						idx |= (1 << j);
 				}
-				truthTable[idx] = 1;
+				truthTable->at(idx) = 1;
 			}
 		}
-		queueNodes.pop_front();
+		queueNodes->pop_front();
+		if (hi->generateTruthTable(queueNodes, variables, truthTable)) {
+			std::vector<std::string> codigos;
+			std::string base;
+			for (unsigned int i = 0; i < variables->size(); i++)
+				base += "*";
+
+			BddNode *currentNode = queueNodes->at(0);
+			BddNode *prevNode = this;
+			for (unsigned int i = 1; i <= queueNodes->size() - 1; i++) {
+				int indexVar = 0;
+				for (std::set<std::string>::iterator it = variables->begin();
+						it != variables->end(); it++, indexVar++) {
+					if ((*it).compare(prevNode->var) == 0)
+						break;
+				}
+
+				if (prevNode->lo == currentNode)
+					base[indexVar] = '0';
+				else
+					base[indexVar] = '1';
+				if (i < queueNodes->size() - 1) {
+					prevNode = queueNodes->at(i + 1);
+					currentNode = queueNodes->at(i);
+				}
+			}
+
+			codigos.push_back(base);
+			bool fill;
+			do {
+				bool findPattern = false;
+				fill = false;
+				for (unsigned int i = 0; i < codigos.size() && !findPattern;
+						i++)
+					for (unsigned int j = 0;
+							j < codigos[i].size() && !findPattern; j++) {
+						if (codigos[i][j] == '*') {
+							std::string newPattern = codigos[i];
+							codigos.erase(codigos.begin() + i);
+							newPattern[j] = '0';
+							codigos.push_back(newPattern);
+							newPattern[j] = '1';
+							codigos.push_back(newPattern);
+							findPattern = true;
+							fill = true;
+						}
+					}
+			} while (fill);
+
+			for (unsigned int i = 0; i < codigos.size(); i++) {
+				int idx = 0;
+				for (unsigned int j = 0; j < codigos[i].size(); j++) {
+					if (codigos[i][j] == '1')
+						idx |= (1 << j);
+				}
+				truthTable->at(idx) = 1;
+			}
+		}
+		queueNodes->pop_front();
 		return false;
 	}
 
-	std::string bin(unsigned n, unsigned int bytes = 32)
+};
+
+class BddTree: public BddNode
+{
+public:
+	typedef BddNode super;
+	std::deque<BddNode*> queueNodes;
+	bool firstExpresion;
+	int currentId = 1;
+	std::vector<BddNode*> labelNodes;
+	std::set<std::string> variables;
+	std::vector<bool> *truthTable;
+
+	void erase()
 	{
-		std::string binaryStr;
-	    unsigned i;
-	    for (i = 1 << (bytes - 1); i > 0; i = i / 2)
-	        (n & i)? binaryStr += "1": binaryStr += "0";
-	    return binaryStr;
+		super::erase();
+		truthTable->clear();
+		delete truthTable;
+		delete this;
+	}
+
+	void getBooleanFunction()
+	{
+		queueNodes.clear();
+		super::getBooleanFunction(&queueNodes, &firstExpresion);
+		queueNodes.clear();
+	}
+
+	void reduce()
+	{
+		currentId = 1;
+		labelNodes.clear();
+		super::label(&labelNodes, &currentId);
+		labelNodes.clear();
+		redirect(&labelNodes, this);
+		labelNodes.clear();
+	}
+
+	void apply(BddTree * tree)
+	{
+
+	}
+
+	void generateTruthTable()
+	{
+		queueNodes.clear();
+		size_t tableSize = 1;
+		for (unsigned int i = 0; i < variables.size(); ++i)
+			tableSize *= 2;
+		truthTable = new std::vector<bool>(tableSize, false);
+		super::generateTruthTable(&queueNodes, &variables, truthTable);
+		queueNodes.clear();
 	}
 
 	void printTruthTable()
 	{
-		for(unsigned int i = 0; i < truthTable.size(); i++)
-		{
+		for (unsigned int i = 0; i < truthTable->size(); i++) {
 			std::string binary = bin(i, variables.size());
 			int idx = 0;
 			for (unsigned int j = 0; j < binary.size(); j++) {
 				if (binary[j] == '1')
 					idx |= (1 << j);
 			}
-			std::cout << binary << " | " << truthTable[idx]  << std::endl;
+			std::cout << binary << " | " << truthTable->at(idx) << std::endl;
 		}
 	}
-
-	bool operator()(const BddNode *obj2) const
+private:
+	std::string bin(unsigned n, unsigned int bytes = 32)
 	{
-		if (var.compare(obj2->var) == 0)
-			return true;
-		else
-			return false;
+		std::string binaryStr;
+		unsigned i;
+		for (i = 1 << (bytes - 1); i > 0; i = i / 2)
+			(n & i) ? binaryStr += "1" : binaryStr += "0";
+		return binaryStr;
 	}
 };
 
@@ -504,14 +535,14 @@ std::vector<std::string> infijaPosfija(std::string infija) {
 	return posFija;
 }
 
-BddNode * createBDDummy(std::vector<std::string> expresion)
+BddTree * createBDDummy(std::vector<std::string> expresion)
 {
-	BddNode * root = new BddNode();
-	root->var = "z";
-	root->varId = 0;
-	root->variables.insert("z");
-	root->variables.insert("y");
-	root->variables.insert("x");
+	BddTree * tree = new BddTree();
+	tree->var = "z";
+	tree->varId = 0;
+	tree->variables.insert("z");
+	tree->variables.insert("y");
+	tree->variables.insert("x");
 
 	BddNode * child1 = new BddNode();
 	child1->var = "x";
@@ -547,8 +578,8 @@ BddNode * createBDDummy(std::vector<std::string> expresion)
 	child8->varId = 1;
 	child8->isTerminal = true;
 
-	root->lo = child1;
-	root->hi = child2;
+	tree->lo = child1;
+	tree->hi = child2;
 	child1->lo = child3;
 	child1->hi = child4;
 	child3->lo = child7;
@@ -562,17 +593,17 @@ BddNode * createBDDummy(std::vector<std::string> expresion)
 	child6->lo = child8;
 	child6->hi = child7;
 
-	return root;
+	return tree;
 }
 
-BddNode * createBDDummy2(std::vector<std::string> expresion)
+BddTree * createBDDummy2(std::vector<std::string> expresion)
 {
-	BddNode * root = new BddNode();
-	root->var = "z";
-	root->varId = 2;
-	root->variables.insert("z");
-	root->variables.insert("y");
-	root->variables.insert("x");
+	BddTree * tree = new BddTree();
+	tree->var = "z";
+	tree->varId = 2;
+	tree->variables.insert("z");
+	tree->variables.insert("y");
+	tree->variables.insert("x");
 
 	BddNode * child1 = new BddNode();
 	child1->var = "y";
@@ -600,8 +631,8 @@ BddNode * createBDDummy2(std::vector<std::string> expresion)
 	child6->varId = 1;
 	child6->isTerminal = true;
 
-	root->lo = child1;
-	root->hi = child2;
+	tree->lo = child1;
+	tree->hi = child2;
 	child1->lo = child5;
 	child1->hi = child3;
 	child3->lo = child5;
@@ -611,18 +642,21 @@ BddNode * createBDDummy2(std::vector<std::string> expresion)
 	child4->lo = child5;
 	child4->hi = child6;
 
-	return root;
+	return tree;
 }
 
 int main(int argc, char ** argv) {
 	//infijaPosfija(infija);
 
-	BddNode * root = createBDDummy2(std::vector<std::string>());
-	root->getFuncionBoolean();
-	root->generateTruthTable();
-	root->printTruthTable();
-	root->reduce();
-	root->erase();
+	BddTree * tree = createBDDummy(std::vector<std::string>());
+	tree->getBooleanFunction();
+	tree->generateTruthTable();
+	tree->printTruthTable();
+	tree->reduce();
+	tree->getBooleanFunction();
+	tree->generateTruthTable();
+	tree->printTruthTable();
+	tree->erase();
 
 	return 1;
 }
