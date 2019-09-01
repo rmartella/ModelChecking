@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cmath>
 #include <map>
+//#include <sstream>
 
 
 std::string infija = "(¬U*B*CAB * ¬B) + (D * ¬Y)";
@@ -74,7 +75,7 @@ protected:
 			for (unsigned int i = 1; i < queueNodes->size(); i++) {
 				prevNode = queueNodes->at(i);
 				if (prevNode->lo == currentNode)
-					std::cout << "* ¬" << queueNodes->at(i)->var;
+					std::cout << "*¬" << queueNodes->at(i)->var;
 				else
 					std::cout << "*" << queueNodes->at(i)->var;
 				currentNode = prevNode;
@@ -180,6 +181,19 @@ protected:
 					parent->hi = *it;
 				delete this;
 			} else if(*it != this)
+				nodesInsert->push_back(this);
+		}
+		else
+		{
+			std::vector<BddNode*>::iterator it = nodesInsert->begin();
+			for (it = nodesInsert->begin(); it != nodesInsert->end(); it++) {
+				BddNode* node = *it;
+				if (node->id == this->id && node != this)
+					break;
+			}
+			if (it != nodesInsert->end())
+				delete this;
+			else if(*it != this)
 				nodesInsert->push_back(this);
 		}
 	}
@@ -310,6 +324,51 @@ protected:
 		return false;
 	}
 
+	BddNode *apply(std::string op, BddNode *node)
+	{
+		BddNode * newNode = new BddNode();
+		// Todo varID
+		if (this->lo == nullptr && this->hi == nullptr && node->lo == nullptr
+				&& node->hi == nullptr) {
+			newNode->isTerminal = true;
+			int vf = atoi(this->var.c_str());
+			int vg = atoi(node->var.c_str());
+			int vr;
+			if (op.compare("+") == 0) {
+				vr = vf | vg;
+			}
+			if(vr)
+				newNode->var = '1';
+			else
+				newNode->var = '0';
+			newNode->varId = vr;
+		} else {
+			newNode->isTerminal = false;
+			if (this->var.compare(node->var) == 0) {
+				newNode->var = this->var;
+				newNode->lo = this->lo->apply(op, node->lo);
+				newNode->hi = this->hi->apply(op, node->hi);
+			} else {
+				if (this->lo != nullptr && this->hi != nullptr
+						&& ((node->lo == nullptr && node->hi == nullptr)
+								|| node->varId > this->varId)) {
+					newNode->var = this->var;
+					newNode->lo = this->lo->apply(op, node);
+					newNode->hi = this->hi->apply(op, node);
+				} else {
+					if (node->lo != nullptr && node->hi != nullptr
+							&& ((this->lo == nullptr && this->hi == nullptr)
+									|| this->varId > node->varId)) {
+						newNode->var = node->var;
+						newNode->lo = node->lo->apply(op, this);
+						newNode->hi = node->hi->apply(op, this);
+					}
+				}
+			}
+		}
+		return newNode;
+	}
+
 };
 
 class BddTree: public BddNode
@@ -348,9 +407,17 @@ public:
 		labelNodes.clear();
 	}
 
-	void apply(BddTree * tree)
+	BddTree * apply(std::string op, BddTree * g)
 	{
-
+		BddTree * tree = new BddTree();
+		BddNode * root = super::apply(op, g);
+		tree->isTerminal = root->isTerminal;
+		tree->hi = root->hi;
+		tree->lo = root->lo;
+		tree->var = root->var;
+		tree->varId = root->varId;
+		//delete root;
+		return tree;
 	}
 
 	void generateTruthTable()
@@ -600,7 +667,7 @@ BddTree * createBDDummy2(std::vector<std::string> expresion)
 {
 	BddTree * tree = new BddTree();
 	tree->var = "z";
-	tree->varId = 2;
+	tree->varId = 0;
 	tree->variables.insert("z");
 	tree->variables.insert("y");
 	tree->variables.insert("x");
@@ -615,11 +682,11 @@ BddTree * createBDDummy2(std::vector<std::string> expresion)
 
 	BddNode * child3 = new BddNode();
 	child3->var = "x";
-	child3->varId = 2;
+	child3->varId = 0;
 
 	BddNode * child4 = new BddNode();
 	child4->var = "x";
-	child4->varId = 2;
+	child4->varId = 0;
 
 	BddNode * child5 = new BddNode();
 	child5->var = "0";
@@ -645,10 +712,92 @@ BddTree * createBDDummy2(std::vector<std::string> expresion)
 	return tree;
 }
 
+BddTree * createBDDummyF(std::vector<std::string> expresion)
+{
+	BddTree * tree = new BddTree();
+	tree->var = "z";
+	tree->varId = 0;
+	tree->variables.insert("z");
+	tree->variables.insert("y");
+	tree->variables.insert("x");
+	tree->variables.insert("w");
+
+	BddNode * child1 = new BddNode();
+	child1->var = "y";
+	child1->varId = 1;
+
+	BddNode * child2 = new BddNode();
+	child2->var = "x";
+	child2->varId = 2;
+
+	BddNode * child3 = new BddNode();
+	child3->var = "w";
+	child3->varId = 3;
+
+	BddNode * child5 = new BddNode();
+	child5->var = "0";
+	child5->varId = 0;
+	child5->isTerminal = true;
+
+	BddNode * child6 = new BddNode();
+	child6->var = "1";
+	child6->varId = 1;
+	child6->isTerminal = true;
+
+	tree->lo = child1;
+	tree->hi = child2;
+	child1->lo = child3;
+	child1->hi = child2;
+	child2->lo = child3;
+	child2->hi = child6;
+	child3->lo = child5;
+	child3->hi = child6;
+
+	return tree;
+}
+
+BddTree * createBDDummyG(std::vector<std::string> expresion)
+{
+	BddTree * tree = new BddTree();
+	tree->var = "z";
+	tree->varId = 0;
+	tree->variables.insert("z");
+	tree->variables.insert("x");
+	tree->variables.insert("w");
+
+
+	BddNode * child2 = new BddNode();
+	child2->var = "x";
+	child2->varId = 2;
+
+	BddNode * child3 = new BddNode();
+	child3->var = "w";
+	child3->varId = 3;
+
+	BddNode * child5 = new BddNode();
+	child5->var = "0";
+	child5->varId = 0;
+	child5->isTerminal = true;
+
+	BddNode * child6 = new BddNode();
+	child6->var = "1";
+	child6->varId = 1;
+	child6->isTerminal = true;
+
+	tree->lo = child3;
+	tree->hi = child2;
+	child2->lo = child3;
+	child2->hi = child6;
+	child3->lo = child5;
+	child3->hi = child6;
+
+	return tree;
+}
+
 int main(int argc, char ** argv) {
 	//infijaPosfija(infija);
 
-	BddTree * tree = createBDDummy(std::vector<std::string>());
+	/*BddTree * tree = createBDDummy(std::vector<std::string>());
 	tree->getBooleanFunction();
 	tree->generateTruthTable();
 	tree->printTruthTable();
@@ -656,7 +805,42 @@ int main(int argc, char ** argv) {
 	tree->getBooleanFunction();
 	tree->generateTruthTable();
 	tree->printTruthTable();
-	tree->erase();
+	tree->erase();*/
+
+	BddTree * treeF = createBDDummyF(std::vector<std::string>());
+	treeF->getBooleanFunction();
+	treeF->generateTruthTable();
+	treeF->printTruthTable();
+	treeF->reduce();
+	treeF->getBooleanFunction();
+	treeF->generateTruthTable();
+	treeF->printTruthTable();
+
+	BddTree * treeG = createBDDummyG(std::vector<std::string>());
+	treeG->getBooleanFunction();
+	treeG->generateTruthTable();
+	treeG->printTruthTable();
+	treeG->reduce();
+	treeG->getBooleanFunction();
+	treeG->generateTruthTable();
+	treeG->printTruthTable();
+
+	BddTree * treeForG = treeG->apply("+", treeF);
+	treeForG->variables.insert("z");
+	treeForG->variables.insert("y");
+	treeForG->variables.insert("x");
+	treeForG->variables.insert("w");
+	treeForG->getBooleanFunction();
+	treeForG->generateTruthTable();
+	treeForG->printTruthTable();
+	treeForG->reduce();
+	treeForG->getBooleanFunction();
+	treeForG->generateTruthTable();
+	treeForG->printTruthTable();
+
+	treeF->erase();
+	treeG->erase();
+	treeForG->erase();
 
 	return 1;
 }
