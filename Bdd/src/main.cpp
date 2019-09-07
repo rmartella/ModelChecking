@@ -161,27 +161,26 @@ protected:
 		}
 	}
 
-	void redirect(std::vector<BddNode*> *nodesInsert, BddNode* parent)
-	{
-		if(this->hi != nullptr && this->lo != nullptr)
-		{
+	void redirect(std::vector<BddNode*> *nodesInsert,
+			std::set<BddNode*> *toDelete, BddNode* parent) {
+		if (this->hi != nullptr && this->lo != nullptr) {
 			// parent = this;
-			this->lo->redirect(nodesInsert, this);
-			this->hi->redirect(nodesInsert, this);
+			this->lo->redirect(nodesInsert, toDelete, this);
+			this->hi->redirect(nodesInsert, toDelete, this);
 			/*std::vector<BddNode*>::iterator it = nodesInsert->begin();
-			for (it = nodesInsert->begin(); it != nodesInsert->end(); it++) {
-				BddNode* node = *it;
-				if (node->id == this->id && node != this)
-					break;
-			}
-			if (it != nodesInsert->end()) {
-				if (parent->lo == this)
-					parent->lo = *it;
-				else
-					parent->hi = *it;
-				delete this;
-			} else if(*it != this)
-				nodesInsert->push_back(this);*/
+			 for (it = nodesInsert->begin(); it != nodesInsert->end(); it++) {
+			 BddNode* node = *it;
+			 if (node->id == this->id && node != this)
+			 break;
+			 }
+			 if (it != nodesInsert->end()) {
+			 if (parent->lo == this)
+			 parent->lo = *it;
+			 else
+			 parent->hi = *it;
+			 delete this;
+			 } else if(*it != this)
+			 nodesInsert->push_back(this);*/
 		}
 		std::vector<BddNode*>::iterator it;
 		for (it = nodesInsert->begin(); it != nodesInsert->end(); it++) {
@@ -194,7 +193,7 @@ protected:
 				parent->lo = *it;
 			else
 				parent->hi = *it;
-			delete this;
+			toDelete->insert(this);
 		} else if (*it != this)
 			nodesInsert->push_back(this);
 		else if (nodesInsert->size() == 0 || *it != this)
@@ -418,6 +417,74 @@ protected:
 			this->hi->setVarId(variables);
 		}
 	}
+
+	void copy(BddNode * lo, BddNode * hi)
+	{
+		BddNode * newNode = new BddNode();
+		BddNode * newNodeLo = nullptr;
+		BddNode * newNodeHi = nullptr;
+		newNode->id = this->id;
+		newNode->varId = this->varId;
+		newNode->var = this->var;
+		newNode->isTerminal = this->isTerminal;
+		if(lo != nullptr && hi != nullptr)
+		{
+			newNodeLo = new BddNode();
+			newNodeLo->id = this->id;
+			newNodeLo->varId = this->varId;
+			newNodeLo->var = this->var;
+			newNodeLo->isTerminal = this->isTerminal;
+			newNodeHi = new BddNode();
+			newNodeHi->id = this->id;
+			newNodeHi->varId = this->varId;
+			newNodeHi->var = this->var;
+			newNodeHi->isTerminal = this->isTerminal;
+		}
+		if (this->lo != nullptr && this->hi != nullptr) {
+			this->lo->copy(this->lo, this->hi);
+			this->hi->copy(this->lo, this->hi);
+			newNode->lo = newNodeLo;
+			newNode->hi = newNodeHi;
+		}
+	}
+
+	void restrict(std::string variable, bool value, BddNode * parent,
+			std::set<BddNode*> *toDelete)
+	{
+		// Todo Review if is necesary clear the memory when exist more edges entrance
+		BddNode * newNode = new BddNode();
+		newNode->id = this->id;
+		newNode->varId = this->varId;
+		newNode->var = this->var;
+		newNode->isTerminal = this->isTerminal;
+		if(parent != nullptr)
+		{
+			newNode->lo = this->lo;
+			newNode->hi = this->hi;
+		}
+		if (this->lo != nullptr && this->hi != nullptr) {
+			this->lo->restrict(variable, value, this, toDelete);
+			this->hi->restrict(variable, value, this, toDelete);
+			if (variable.compare(this->var) == 0)
+			{
+				if(parent != nullptr)
+				{
+					if (parent->lo == this) {
+						if (!value)
+							parent->lo = this->lo;
+						else
+							parent->lo = this->hi;
+					} else if (parent->hi == this) {
+						if (!value)
+							parent->hi = this->lo;
+						else
+							parent->hi = this->hi;
+					}
+					toDelete->insert(this);
+				}
+			}
+		}
+	}
 };
 
 class BddTree: public BddNode
@@ -478,8 +545,33 @@ public:
 		labelNodes.clear();
 		super::label(&labelNodes, &currentId);
 		labelNodes.clear();
-		redirect(&labelNodes, this);
+		std::set<BddNode*> toDelete;
+		redirect(&labelNodes, &toDelete, this);
+		for (std::set<BddNode*>::iterator it = toDelete.begin();
+						it != toDelete.end(); it++)
+		{
+			BddNode* bddDelete = *it;
+			delete bddDelete;
+		}
 		labelNodes.clear();
+	}
+
+	void restrict(std::string variable, bool value)
+	{
+		std::set<BddNode*> toDelete;
+		/*if (this->hi == nullptr && this->lo == nullptr
+				&& this->var.compare(variable) == 0)
+		{
+
+		}
+		else*/
+		super::restrict(variable, value, nullptr, &toDelete);
+		for (std::set<BddNode*>::iterator it = toDelete.begin();
+								it != toDelete.end(); it++)
+		{
+			BddNode* bddDelete = *it;
+			delete bddDelete;
+		}
 	}
 
 	std::vector<std::string> generateVariables(BddTree * g)
@@ -802,26 +894,26 @@ BddTree * createBDDummy(std::vector<std::string> expresion)
 BddTree * createBDDummy2(std::vector<std::string> expresion)
 {
 	BddTree * tree = new BddTree();
-	tree->var = "z";
+	tree->var = "x1";
 	//tree->varId = 0;
-	tree->variables.push_back("z");
-	tree->variables.push_back("y");
-	tree->variables.push_back("x");
+	tree->variables.push_back("x1");
+	tree->variables.push_back("x2");
+	tree->variables.push_back("x3");
 
 	BddNode * child1 = new BddNode();
-	child1->var = "y";
+	child1->var = "x2";
 	//child1->varId = 1;
 
 	BddNode * child2 = new BddNode();
-	child2->var = "y";
+	child2->var = "x2";
 	//child2->varId = 1;
 
 	BddNode * child3 = new BddNode();
-	child3->var = "x";
+	child3->var = "x3";
 	//child3->varId = 0;
 
 	BddNode * child4 = new BddNode();
-	child4->var = "x";
+	child4->var = "x3";
 	//child4->varId = 0;
 
 	BddNode * child5 = new BddNode();
@@ -853,23 +945,23 @@ BddTree * createBDDummy2(std::vector<std::string> expresion)
 BddTree * createBDDummyF(std::vector<std::string> expresion)
 {
 	BddTree * tree = new BddTree();
-	tree->var = "z";
+	tree->var = "x1";
 	//tree->varId = 0;
-	tree->variables.push_back("z");
-	tree->variables.push_back("y");
-	tree->variables.push_back("x");
-	tree->variables.push_back("w");
+	tree->variables.push_back("x1");
+	tree->variables.push_back("x2");
+	tree->variables.push_back("x3");
+	tree->variables.push_back("x4");
 
 	BddNode * child1 = new BddNode();
-	child1->var = "y";
+	child1->var = "x2";
 	//child1->varId = 1;
 
 	BddNode * child2 = new BddNode();
-	child2->var = "x";
+	child2->var = "x3";
 	//child2->varId = 2;
 
 	BddNode * child3 = new BddNode();
-	child3->var = "w";
+	child3->var = "x4";
 	//child3->varId = 3;
 
 	BddNode * child5 = new BddNode();
@@ -899,19 +991,19 @@ BddTree * createBDDummyF(std::vector<std::string> expresion)
 BddTree * createBDDummyG(std::vector<std::string> expresion)
 {
 	BddTree * tree = new BddTree();
-	tree->var = "z";
+	tree->var = "x1";
 	//tree->varId = 0;
-	tree->variables.push_back("z");
-	tree->variables.push_back("x");
-	tree->variables.push_back("w");
+	tree->variables.push_back("x1");
+	tree->variables.push_back("x3");
+	tree->variables.push_back("x4");
 
 
 	BddNode * child2 = new BddNode();
-	child2->var = "x";
+	child2->var = "x3";
 	//child2->varId = 2;
 
 	BddNode * child3 = new BddNode();
-	child3->var = "w";
+	child3->var = "x4";
 	//child3->varId = 3;
 
 	BddNode * child5 = new BddNode();
@@ -973,6 +1065,54 @@ BddTree * createBDDDummyH()
 	tree->hi = child6;
 
 	return tree;
+}
+
+BddTree * createBDDRestrictDummy()
+{
+	BddTree * tree = new BddTree();
+	tree->var = "x1";
+	tree->variables.push_back("x1");
+	tree->variables.push_back("x2");
+	tree->variables.push_back("y1");
+	tree->variables.push_back("y2");
+	tree->variables.push_back("x3");
+	tree->variables.push_back("y3");
+
+	BddNode * child1 = new BddNode();
+	BddNode * child2 = new BddNode();
+	BddNode * child3 = new BddNode();
+	BddNode * child4 = new BddNode();
+	BddNode * child5 = new BddNode();
+	BddNode * child6 = new BddNode();
+	BddNode * child7 = new BddNode();
+
+	child1->var = "x2";
+	child2->var = "y1";
+	child3->var = "x3";
+	child4->var = "y2";
+	child5->var = "y3";
+	child6->var = "0";
+	child6->isTerminal = true;
+	child7->var = "1";
+	child7->isTerminal = true;
+
+	tree->lo = child1;
+	tree->hi = child2;
+	child1->lo = child3;
+	child1->hi = child4;
+	child2->lo = child1;
+	child2->hi = child7;
+	child3->lo = child6;
+	child3->hi = child5;
+	child4->lo = child3;
+	child4->hi = child6;
+	child5->lo = child6;
+	child5->hi = child7;
+
+	tree->setVarId();
+
+	return tree;
+
 }
 
 BddTree * createBDD(std::vector<std::string> posfija)
@@ -1054,11 +1194,16 @@ BddTree * createBDD(std::vector<std::string> posfija)
 int main(int argc, char ** argv) {
 	std::vector<std::string> posfija = infijaPosfija(infija);
 
-	BddTree * tree = createBDD(posfija);
+	// This is for create BDD with propotitional formula
+	/*BddTree * tree = createBDD(posfija);
 	tree->getBooleanFunction();
 	tree->generateTruthTable();
 	tree->printTruthTable();
-	tree->erase();
+	tree->restrict("X2", true);
+	tree->getBooleanFunction();
+	tree->generateTruthTable();
+	tree->printTruthTable();
+	tree->erase();*/
 
 	/*BddTree * tree = createBDDummy(std::vector<std::string>());
 	tree->getBooleanFunction();
@@ -1070,6 +1215,7 @@ int main(int argc, char ** argv) {
 	tree->printTruthTable();
 	tree->erase();*/
 
+	// This is the example to apply
 	/*BddTree * treeF = createBDDummyF(std::vector<std::string>());
 	treeF->getBooleanFunction();
 	treeF->generateTruthTable();
@@ -1088,11 +1234,15 @@ int main(int argc, char ** argv) {
 	treeG->generateTruthTable();
 	treeG->printTruthTable();
 
-	BddTree * treeForG = treeG->apply("+", treeF);
+	BddTree * treeForG = treeF->apply("|", treeG);
 	treeForG->getBooleanFunction();
 	treeForG->generateTruthTable();
 	treeForG->printTruthTable();
 	treeForG->reduce();
+	treeForG->getBooleanFunction();
+	treeForG->generateTruthTable();
+	treeForG->printTruthTable();
+	treeForG->restrict("x3", 1);
 	treeForG->getBooleanFunction();
 	treeForG->generateTruthTable();
 	treeForG->printTruthTable();
@@ -1101,6 +1251,7 @@ int main(int argc, char ** argv) {
 	treeG->erase();
 	treeForG->erase();*/
 
+	// This is for another test
 	/*BddTree * treeH = createBDDDummyH();
 	treeH->getBooleanFunction();
 	treeH->generateTruthTable();
@@ -1119,7 +1270,7 @@ int main(int argc, char ** argv) {
 	treeE->generateTruthTable();
 	treeE->printTruthTable();
 
-	BddTree * treeEorH = treeE->apply("+", treeH);
+	BddTree * treeEorH = treeE->apply("|", treeH);
 	treeEorH->getBooleanFunction();
 	treeEorH->generateTruthTable();
 	treeEorH->printTruthTable();
@@ -1132,18 +1283,6 @@ int main(int argc, char ** argv) {
 	treeH->erase();
 	treeEorH->erase();*/
 
-	/*BddTree tree1;
-	tree1.variables.push_back("z");
-	tree1.variables.push_back("y");
-	tree1.variables.push_back("x");
-	tree1.variables.push_back("w");
-	tree1.variables.push_back("u");
-	BddTree tree2;
-	tree2.variables.push_back("y");
-	tree2.variables.push_back("v");
-	tree2.variables.push_back("u");
-	tree2.generateVariables(&tree1);*/
-
 	/*BddTree * treeH = createBDDDummyH();
 	BddTree * treeE = createBDDDummyE();
 	BddTree * nTreeH = treeH->apply("¬");
@@ -1154,6 +1293,17 @@ int main(int argc, char ** argv) {
 	gr->generateTruthTable();
 	gr->printTruthTable();
 	treeH->erase();*/
+
+	// This is for restrict
+	BddTree * bddTree = createBDDRestrictDummy();
+	bddTree->getBooleanFunction();
+	bddTree->generateTruthTable();
+	bddTree->printTruthTable();
+	bddTree->reduce();
+	bddTree->getBooleanFunction();
+	bddTree->generateTruthTable();
+	bddTree->printTruthTable();
+	bddTree->restrict("x3", false);
 
 	return 1;
 }
