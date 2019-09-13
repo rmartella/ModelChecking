@@ -633,6 +633,34 @@ public:
 		return tree;
 	}
 
+	BddTree * exists(std::string var)
+	{
+		BddTree * restrictBdd0 = this->restrict(var, false);
+		BddTree * restrictBdd1 = this->restrict(var, true);
+		BddTree * apply = restrictBdd0->apply("|", restrictBdd1);
+		restrictBdd0->erase();
+		restrictBdd1->erase();
+		return apply;
+	}
+
+	// TODO Review why is consuming memory
+	BddTree * exists(std::vector<std::string> vars)
+	{
+		BddTree * currBdd = this;
+		for(unsigned int i = 0; i < vars.size(); i++)
+		{
+			BddTree * restrictBdd0 = currBdd->restrict(vars[i], false);
+			BddTree * restrictBdd1 = currBdd->restrict(vars[i], true);
+			if(currBdd != this)
+				currBdd->erase();
+			currBdd = restrictBdd0->apply("|", restrictBdd1);
+			currBdd->reduce();
+			restrictBdd0->erase();
+			restrictBdd1->erase();
+		}
+		return currBdd;
+	}
+
 	void setVarId()
 	{
 		super::setVarId(&variables);
@@ -1316,18 +1344,21 @@ int main(int argc, char ** argv) {
 	bddTree->generateTruthTable();
 	bddTree->printTruthTable();
 
-	BddTree * restrictBdd0 = bddTree->restrict("x3", false);
-	BddTree * restrictBdd1 = bddTree->restrict("x3", true);
-	restrictBdd0->getBooleanFunction();
-	restrictBdd0->generateTruthTable();
-	restrictBdd0->printTruthTable();
-	restrictBdd1->getBooleanFunction();
-	restrictBdd1->generateTruthTable();
-	restrictBdd1->printTruthTable();
+	/*BddTree * existsBdd = bddTree->exists("x3");
+	existsBdd->getBooleanFunction();
+	existsBdd->generateTruthTable();
+	existsBdd->printTruthTable();*/
+
+	std::vector<std::string> variables;
+	variables.push_back("x3");
+	variables.push_back("x2");
+	BddTree * existsBdd = bddTree->exists(variables);
+	existsBdd->getBooleanFunction();
+	existsBdd->generateTruthTable();
+	existsBdd->printTruthTable();
+	existsBdd->erase();
 
 	bddTree->erase();
-	restrictBdd0->erase();
-	restrictBdd1->erase();
 
 	return 1;
 }
